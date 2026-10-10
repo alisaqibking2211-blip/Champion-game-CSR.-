@@ -1,440 +1,250 @@
-require "import"
-import "android.widget.*"
-import "android.view.*"
-import "android.content.*"
-import "android.content.SharedPreferences"
--- میڈیا پلیئر امپورٹ کیا گیا
-import "android.media.MediaPlayer"
-import "java.io.File"
-
-local context = service or activity or this
-
-function speak(t)
-  if service then
-    service.speak(t)
-  elseif context then
-    Toast.makeText(context, t, 0).show()
-  end
-end
-
-local prefs = context.getSharedPreferences("GamePrefs", 0)
-local editor = prefs.edit()
-
-playerName = prefs.getString("playerName", nil)
-
-gameStats = {
-  guessing = {score = 0, played = 0},
-  math = {score = 0, played = 0},
-  rps = {score = 0, played = 0},
-  dice = {score = 0, played = 0}
-}
-
-function loadStats()
-  gameStats.guessing.score = prefs.getInt("guessing_score", 0)
-  gameStats.guessing.played = prefs.getInt("guessing_played", 0)
-  gameStats.math.score = prefs.getInt("math_score", 0)
-  gameStats.math.played = prefs.getInt("math_played", 0)
-  gameStats.rps.score = prefs.getInt("rps_score", 0)
-  gameStats.rps.played = prefs.getInt("rps_played", 0)
-  gameStats.dice.score = prefs.getInt("dice_score", 0)
-  gameStats.dice.played = prefs.getInt("dice_played", 0)
-end
-
-function saveStats()
-  editor.putInt("guessing_score", gameStats.guessing.score)
-  editor.putInt("guessing_played", gameStats.guessing.played)
-  editor.putInt("math_score", gameStats.math.score)
-  editor.putInt("math_played", gameStats.math.played)
-  editor.putInt("rps_score", gameStats.rps.score)
-  editor.putInt("rps_played", gameStats.rps.played)
-  editor.putInt("dice_score", gameStats.dice.score)
-  editor.putInt("dice_played", gameStats.dice.played)
-  editor.apply()
-end
-
-loadStats()
-
-mainDialog = nil
-
-function getInfoText()
-  return "Guessing Game: Score " .. gameStats.guessing.score .. " , Played " .. gameStats.guessing.played .. "\n" ..
-         "Math Quiz: Score " .. gameStats.math.score .. " , Played " .. gameStats.math.played .. "\n" ..
-         "Rock Paper Scissors: Score " .. gameStats.rps.score .. " , Played " .. gameStats.rps.played .. "\n" ..
-         "Dice Roll: Score " .. gameStats.dice.score .. " , Played " .. gameStats.dice.played
-end
-
-function showMainMenu()
-  if mainDialog then
-    mainDialog.dismiss()
-  end
-  mainDialog = LuaDialog(context)
-  mainDialog.setTitle("Champion Game")
-  
-  local layout = {LinearLayout, orientation="vertical", padding="20dp",
-    {TextView, text="Username: " .. tostring(playerName), textSize="18sp", textColor="#FF0000", layout_marginBottom="5dp"},
-    {TextView, text="Developed by. CSR official", textSize="14sp", textColor="#666666", layout_marginBottom="10dp"},
-    {TextView, text="Games", textSize="16sp", textColor="#0000FF", layout_marginTop="5dp"},
-    {Button, text="1. Guessing Game", layout_width="fill", id="btnGuess"},
-    {Button, text="2. Math Quiz", layout_width="fill", layout_marginTop="5dp", id="btnMath"},
-    {Button, text="3. Rock Paper Scissors", layout_width="fill", layout_marginTop="5dp", id="btnRPS"},
-    {Button, text="4. Dice Roll", layout_width="fill", layout_marginTop="5dp", id="btnDice"},
-    {TextView, text="Information", textSize="16sp", textColor="#0000FF", layout_marginTop="15dp"},
-    {TextView, id="infoText", text=getInfoText(), textSize="14sp", layout_marginTop="5dp"},
-    {Button, text="About", layout_width="fill", layout_marginTop="15dp", id="btnAbout"},
-    {Button, text="Exit", layout_width="fill", layout_marginTop="10dp", id="btnExit"}
-  }
-  mainDialog.setView(loadlayout(layout))
-  
-  btnGuess.onClick = function()
-    mainDialog.dismiss()
-    startGuessingGame()
-  end
-  btnMath.onClick = function()
-    mainDialog.dismiss()
-    startMathGame()
-  end
-  btnRPS.onClick = function()
-    mainDialog.dismiss()
-    startRPSGame()
-  end
-  btnDice.onClick = function()
-    mainDialog.dismiss()
-    startDiceGame()
-  end
-  btnAbout.onClick = function()
-    showAbout()
-  end
-  btnExit.onClick = function()
-    mainDialog.dismiss()
-    if activity then activity.finish() end
-  end
-  
-  mainDialog.onCancel = function()
-    mainDialog = nil
-  end
-  mainDialog.show()
-end
-
-function updateAndShowMenu()
-  saveStats()
-  showMainMenu()
-end
-
-function showResult(title, msg, gameKey, isWin, retryFunc)
-  if isWin then
-    gameStats[gameKey].score = gameStats[gameKey].score + 1
-  end
-  saveStats()
-  
-  pcall(function()
-    local folderPath = "/storage/emulated/0/解说/Plugins/Champion Game by CSR official. /"
-    local soundFile = isWin and "chest_open.mp3" or "lesson_failed.mp3"
-    
-    local fullPath = folderPath .. soundFile
-    if File(fullPath).exists() then
-      local mp = MediaPlayer()
-      mp.setDataSource(fullPath)
-      mp.prepare()
-      mp.start()
-    end
-  end)
-
-  local d = LuaDialog(context)
-  d.setTitle(title)
-  local lay = {LinearLayout, orientation="vertical", padding="25dp",
-    {TextView, text=msg, textSize="18sp", gravity="center"},
-    {Button, text="Play Again", layout_marginTop="20dp", layout_width="fill", onClick=function() d.dismiss() if retryFunc then retryFunc() end end},
-    {Button, text="Main Menu", layout_width="fill", onClick=function() d.dismiss() updateAndShowMenu() end}}
-  d.setView(loadlayout(lay))
-  d.show()
-  speak(msg)
-end
-
-function startGuessingGame()
-  gameStats.guessing.played = gameStats.guessing.played + 1
-  saveStats()
-  local target = math.random(1, 20)
-  local attempts = 0
-  local maxAttempts = 5
-  local d = LuaDialog(context)
-  d.setTitle("Guess the Number")
-  
-  local lay = {LinearLayout, orientation="vertical", padding="25dp",
-    {TextView, text="Hi " .. playerName .. ", guess 1-20", textSize="16sp"},
-    {TextView, id="info", text="Attempts left: " .. maxAttempts, textSize="14sp", textColor="#FFAAAA"},
-    {EditText, id="edt", hint="Your guess", inputType="phone", layout_marginTop="10dp"},
-    {Button, text="Check", layout_marginTop="10dp", layout_width="fill", id="btn"}}
-  d.setView(loadlayout(lay))
-  
-  btn.onClick = function()
-    local v = tonumber(edt.Text)
-    if not v then speak("Enter a number") return end
-    attempts = attempts + 1
-    local left = maxAttempts - attempts
-    if v == target then
-      d.dismiss()
-      showResult("You Won!", "Correct in " .. attempts .. " tries", "guessing", true, startGuessingGame)
-    elseif attempts >= maxAttempts then
-      d.dismiss()
-      showResult("Game Over", "Number was " .. target .. "\nBetter luck next time!", "guessing", false, startGuessingGame)
-    else
-      pcall(function()
-        local folderPath = "/storage/emulated/0/解说/Plugins/Champion Game by CSR official. /"
-        local fullPath = folderPath .. "incorrect.mp3"
-        if File(fullPath).exists() then
-          local mp = MediaPlayer()
-          mp.setDataSource(fullPath)
-          mp.prepare()
-          mp.start()
-        end
-      end)
-      
-      info.setText("Attempts left: " .. left)
-      edt.Text = ""
-    end
-  end
-  d.show()
-end
-
-function startMathGame()
-  gameStats.math.played = gameStats.math.played + 1
-  saveStats()
-  local op = math.random(1,3)
-  local n1, n2, ans, opSym
-  if op == 1 then
-    n1, n2 = math.random(1,12), math.random(1,12)
-    ans = n1 + n2
-    opSym = "+"
-  elseif op == 2 then
-    n1, n2 = math.random(5,20), math.random(1,10)
-    while n1 < n2 do n1, n2 = math.random(5,20), math.random(1,10) end
-    ans = n1 - n2
-    opSym = "-"
-  else
-    n1, n2 = math.random(2,10), math.random(2,8)
-    ans = n1 * n2
-    opSym = "x"
-  end
-  local d = LuaDialog(context)
-  d.setTitle("Math Master")
-  
-  local lay = {LinearLayout, orientation="vertical", padding="25dp",
-    {TextView, text="Hi " .. playerName .. ", solve:", textSize="16sp"},
-    {TextView, text=n1 .. " " .. opSym .. " " .. n2 .. " = ?", textSize="28sp", gravity="center", layout_margin="15dp"},
-    {EditText, id="edt", hint="Answer", inputType="phone", layout_marginTop="10dp"},
-    {Button, text="Submit", layout_width="fill", layout_marginTop="15dp", id="btn"}}
-  d.setView(loadlayout(lay))
-  btn.onClick = function()
-    local u = tonumber(edt.Text)
-    if not u then speak("Type answer") return end
-    d.dismiss()
-    if u == ans then
-      showResult("Correct!", "Well done " .. playerName, "math", true, startMathGame)
-    else
-      showResult("Oops!", "Correct answer: " .. ans, "math", false, startMathGame)
-    end
-  end
-  d.show()
-end
-
-function startRPSGame()
-  gameStats.rps.played = gameStats.rps.played + 1
-  saveStats()
-  local ops = {"Rock", "Paper", "Scissors"}
-  local d = LuaDialog(context)
-  d.setTitle("Rock Paper Scissors")
-  local lay = {LinearLayout, orientation="vertical", padding="20dp",
-    {TextView, text=playerName .. ", choose:", textSize="17sp", gravity="center"},
-    {Button, text="Rock", layout_width="fill", id="b1"},
-    {Button, text="Paper", layout_width="fill", id="b2"},
-    {Button, text="Scissors", layout_width="fill", id="b3"}}
-  d.setView(loadlayout(lay))
-  
-  local function playSound(fileName)
-    pcall(function()
-      local folderPath = "/storage/emulated/0/解说/Plugins/Champion Game by CSR official. /"
-      local fullPath = folderPath .. fileName
-      if File(fullPath).exists() then
-        local mp = MediaPlayer()
-        mp.setDataSource(fullPath)
-        mp.prepare()
-        mp.start()
-      else
-        speak("Sound file not found")
-      end
-    end)
-  end
-
-  local function play(userChoice)
-    d.dismiss()
-    local bot = ops[math.random(1,3)]
-    
-    if bot == "Rock" then
-      playSound("stone.mp3")
-    elseif bot == "Paper" then
-      playSound("paper.mp3")
-    elseif bot == "Scissors" then
-      playSound("scissor.mp3")
-    end
-    
-    local resultMsg = ""
-    local isWin = false
-    if userChoice == bot then
-      resultMsg = "Tie\nYou: " .. userChoice .. "\nBot: " .. bot .. "\nNo score."
-      isWin = false
-    elseif (userChoice == "Rock" and bot == "Scissors") or (userChoice == "Paper" and bot == "Rock") or (userChoice == "Scissors" and bot == "Paper") then
-      resultMsg = "You win!\nYou: " .. userChoice .. "\nBot: " .. bot
-      isWin = true
-    else
-      resultMsg = "Bot wins\nYou: " .. userChoice .. "\nBot: " .. bot
-      isWin = false
-    end
-    showResult("Result", resultMsg, "rps", isWin, startRPSGame)
-  end
-  
-  b1.onClick = function() playSound("stone.mp3") play("Rock") end
-  b2.onClick = function() playSound("paper.mp3") play("Paper") end
-  b3.onClick = function() playSound("scissor.mp3") play("Scissors") end
-  d.show()
-end
-
-function startDiceGame()
-  gameStats.dice.played = gameStats.dice.played + 1
-  saveStats()
-  local d = LuaDialog(context)
-  d.setTitle("Dice Duel")
-  local lay = {LinearLayout, orientation="vertical", padding="30dp",
-    {TextView, text=playerName .. " vs Bot", gravity="center", textSize="16sp"},
-    {Button, text="Roll Dice", layout_marginTop="20dp", layout_width="fill", id="btn"}}
-  d.setView(loadlayout(lay))
-  
-  local function playDiceSound()
-    pcall(function()
-      local folderPath = "/storage/emulated/0/解说/Plugins/Champion Game by CSR official. /"
-      local fullPath = folderPath .. "rolldice.mp3"
-      if File(fullPath).exists() then
-        local mp = MediaPlayer()
-        mp.setDataSource(fullPath)
-        mp.prepare()
-        mp.start()
-      end
-    end)
-  end
-
-  btn.onClick = function()
-    d.dismiss()
-    
-    playDiceSound()
-    pcall(function() Thread.sleep(600) end)
-    
-    local ur = math.random(1,6)
-    speak("Your number is " .. ur)
-    pcall(function() Thread.sleep(1000) end)
-    
-    playDiceSound()
-    pcall(function() Thread.sleep(600) end)
-    
-    local br = math.random(1,6)
-    speak("Bot number is " .. br)
-    pcall(function() Thread.sleep(1000) end)
-    
-    local msg = "You: " .. ur .. "  |  Bot: " .. br
-    if ur > br then
-      showResult("You Win!", msg .. "\nLucky you!", "dice", true, startDiceGame)
-    elseif ur < br then
-      showResult("Bot Wins", msg .. "\nBetter luck next time", "dice", false, startDiceGame)
-    else
-      showResult("Draw", msg .. "\nRoll again", "dice", false, startDiceGame)
-    end
-  end
-  d.show()
-end
-
-function showAbout()
-  local d = LuaDialog(context)
-  d.setTitle("About")
-  
-  local Uri = luajava.bindClass("android.net.Uri")
-  
-  local description = [[Champion Game is a fun game hub containing four games: Guessing Game, Math Quiz, Rock Paper Scissors, and Dice Duel. Play games and increase your scores. This app is developed in AndroLua. All scores are tracked per game.]]
-  
-  local layout = {LinearLayout, orientation="vertical", padding="20dp",
-    {TextView, text="Game Name: Champion Game", textSize="16sp", textColor="#000000"},
-    {TextView, text="Developed by. CSR official", textSize="14sp", layout_marginTop="5dp"},
-    {TextView, text="Created by. Ch abdulrafay", textSize="14sp"},
-    {TextView, text="Detail", textSize="16sp", textColor="#0000FF", layout_marginTop="10dp"},
-    {TextView, text=description, textSize="14sp", layout_marginTop="5dp"},
-    {TextView, text="Contact us", textSize="16sp", textColor="#0000FF", layout_marginTop="10dp"},
-    {Button, text="WhatsApp Channel", layout_width="fill", id="waChannel"},
-    {Button, text="WhatsApp Community", layout_width="fill", id="waCommunity"},
-    {Button, text="YouTube Channel", layout_width="fill", id="youtube"},
-    {Button, text="Send Feedback by Developer", layout_width="fill", layout_marginTop="10dp", id="feedback"},
-    {Button, text="Close", layout_width="fill", layout_marginTop="15dp", id="closeBtn"}
-  }
-  d.setView(loadlayout(layout))
-  
-  waChannel.onClick = function()
-    local url = "https://whatsapp.com/channel/0029VbCJfWSAojYuaMuB9E1t"
-    local intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-    context.startActivity(intent)
-  end
-  
-  waCommunity.onClick = function()
-    local url = "https://chat.whatsapp.com/C5jA2u0gGDO9rkgcCY2ybg"
-    local intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-    context.startActivity(intent)
-  end
-  
-  youtube.onClick = function()
-    local url = "https://youtube.com/@csr-official-f5v?si=nwBIaiiFoI8Ix8k5"
-    local intent = Intent(Intent.parseUri(url, 0))
-    context.startActivity(intent)
-  end
-  
-  feedback.onClick = function()
-    local url = "https://wa.me/923057040811"
-    local intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-    context.startActivity(intent)
-  end
-  
-  closeBtn.onClick = function()
-    d.dismiss()
-  end
-  
-  d.show()
-end
-
-function askNameAndStart()
-  -- اگر نام پہلے سے محفوظ ہے تو براہ راست مین مینو کھلے گا
-  if playerName ~= nil and playerName ~= "" and not playerName:match("^%s*$") then
-    showMainMenu()
-    return
-  end
-  
-  local d = LuaDialog(context)
-  d.setTitle("Welcome to Champion Game")
-  d.setCancelable(false) -- یوزر بیک بٹن دبا کر اسے بند نہ کر سکے
-  
-  local lay = {LinearLayout, orientation="vertical", padding="25dp",
-    {TextView, text="Please enter your name:", textSize="16sp"},
-    {EditText, id="nameEdt", hint="e.g. Ch abdulrafay", layout_marginTop="10dp"},
-    {Button, text="Next", layout_width="fill", layout_marginTop="20dp", id="nextBtn"}}
-  d.setView(loadlayout(lay))
-  
-  nextBtn.onClick = function()
-    local name = nameEdt.getText().toString()
-    -- نام کی سخت جانچ، خالی نام یا صرف سپیس آگے نہیں جانے دے گی
-    if name == nil or name == "" or name:match("^%s*$") then
-      speak("Please enter a valid name")
-      return
-    end
-    playerName = name
-    editor.putString("playerName", playerName)
-    editor.apply()
-    d.dismiss()
-    showMainMenu()
-  end
-  d.show()
-end
-
-askNameAndStart()
+do local jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=529 end
+do llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=69 end
+do lIBCDEFGHIJKLMNOPQRS=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l or 586 end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l or 1 end
+do local _={50,91}end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 then llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=91 end
+while false do break end
+do llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 75 end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=lIBCDEFGHIJKLMNOPQRS or 239 end
+if lIBCDEFGHIJKLMNOPQRS~=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk then else end
+if defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk~=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l then else end
+do local llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=686 end
+while false do break end
+do jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=25 end
+do local _=653 end
+local IlcdefgABCDEFGHcdefghijklmnopqrstuvwxXYZabcdefghijklmnoJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxlABCDEFGHIJKLMNOPQRSTUVCDEFGHIJKLMNOP,PQRSTUVWXYZabcdefghijklmnopqrstuvOO,cdefghijklmnopqIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwoXYZabcdefgFGHIJKLMNOPI,lmnopqrstuvwxy1defghijklGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqTUVWXYZabcdefghijklmnopqrstu=string,math,table,bit32
+local OOZabcdefghighijklmnopqrstuQRSTUVWXYZabcdefghijVWXEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrs0,IJKLMNOPQRSTUVWXYo1RSTUVWXYBCDEFGHIJKLMNOPQRSTUVWXYZabcde1,JKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuOghijklmnopqrstuvwxyzIRSTUVW,_IJKLMNOPQRSTUVWXYZabcdefghijklVWXYZl0hijkl1,_OKLMNOqrstuvwxyz_
+pcall(function()end)
+do local _=393 end
+do local jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=966 end
+if lIBCDEFGHIJKLMNOPQRS then jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=28 end
+if lIBCDEFGHIJKLMNOPQRS then defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=77 end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 774 end
+while false do break end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 then YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=47 end
+while false do break end
+do lIBCDEFGHIJKLMNOPQRS=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 103 end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 then jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=100 end
+if defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk then lIBCDEFGHIJKLMNOPQRS=55 end
+local function VWXYZab1cdefghijklBCDEFGHIJKLMNOPQRSTUVWXYZabcijmn(d)
+local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+local m,o={},{}for i=1,#b do m[b:sub(i,i)]=i-1 end;m['=']=0
+local i=1;while i<=#d do
+local a,b,c,e=m[d:sub(i,i)]or 0,m[d:sub(i+1,i+1)]or 0,m[d:sub(i+2,i+2)]or 0,m[d:sub(i+3,i+3)]or 0
+local n=a*262144+b*4096+c*64+e
+o[#o+1]=IlcdefgABCDEFGHcdefghijklmnopqrstuvwxXYZabcdefghijklmnoJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxlABCDEFGHIJKLMNOPQRSTUVCDEFGHIJKLMNOP.char(PQRSTUVWXYZabcdefghijklmnopqrstuvOO.floor(n/65536)%256)
+if d:sub(i+2,i+2)~='='then o[#o+1]=IlcdefgABCDEFGHcdefghijklmnopqrstuvwxXYZabcdefghijklmnoJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxlABCDEFGHIJKLMNOPQRSTUVCDEFGHIJKLMNOP.char(PQRSTUVWXYZabcdefghijklmnopqrstuvOO.floor(n/256)%256)end
+if d:sub(i+3,i+3)~='='then o[#o+1]=IlcdefgABCDEFGHcdefghijklmnopqrstuvwxXYZabcdefghijklmnoJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxlABCDEFGHIJKLMNOPQRSTUVCDEFGHIJKLMNOP.char(n%256)end
+i=i+4 end
+return cdefghijklmnopqIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwoXYZabcdefgFGHIJKLMNOPI.concat(o)end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=56 end
+for _=3,2 do end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst or 71 end
+repeat until true
+repeat until true
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 40 end
+do local _=40 end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=44 end
+repeat until true
+do local YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=36 end
+for _=5,4 do end
+local function CDEFGHIJKLMNOPQRSOUV0defghijk(d,k)
+local o={}for i=1,#d do
+o[#o+1]=IlcdefgABCDEFGHcdefghijklmnopqrstuvwxXYZabcdefghijklmnoJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxlABCDEFGHIJKLMNOPQRSTUVCDEFGHIJKLMNOP.char(lmnopqrstuvwxy1defghijklGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqTUVWXYZabcdefghijklmnopqrstu.bxor(d:byte(i),k))end
+return cdefghijklmnopqIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwoXYZabcdefgFGHIJKLMNOPI.concat(o)end
+do local jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=612 end
+do local defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=791 end
+if jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l~=YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst then else end
+do local _=103 end
+do local _=814 end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0~=YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst then else end
+do llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=13 end
+do local _=808 end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 621 end
+do lIBCDEFGHIJKLMNOPQRS=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l or 497 end
+local function _OBCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopghijkrstu(d,s)
+local o={}for i=1,#d do
+local b=d:byte(i)
+o[#o+1]=IlcdefgABCDEFGHcdefghijklmnopqrstuvwxXYZabcdefghijklmnoJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxlABCDEFGHIJKLMNOPQRSTUVCDEFGHIJKLMNOP.char(lmnopqrstuvwxy1defghijklGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqTUVWXYZabcdefghijklmnopqrstu.bor(lmnopqrstuvwxy1defghijklGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqTUVWXYZabcdefghijklmnopqrstu.rshift(b,s),lmnopqrstuvwxy1defghijklGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqTUVWXYZabcdefghijklmnopqrstu.lshift(b,8-s)%256))end
+return cdefghijklmnopqIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwoXYZabcdefgFGHIJKLMNOPI.concat(o)end
+while false do break end
+for _=4,4 do end
+do jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=24 end
+do local llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=358 end
+do local llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=362 end
+if jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l then jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=43 end
+do local llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=467 end
+if YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst~=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l then else end
+local function BCDEFGHIJKLM1BCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh(d,k)
+local o={}for i=1,#d do
+o[#o+1]=IlcdefgABCDEFGHcdefghijklmnopqrstuvwxXYZabcdefghijklmnoJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxlABCDEFGHIJKLMNOPQRSTUVCDEFGHIJKLMNOP.char((d:byte(i)-k)%256)end
+return cdefghijklmnopqIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwoXYZabcdefgFGHIJKLMNOPI.concat(o)end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 474 end
+do jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 83 end
+while false do break end
+if jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l~=YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst then else end
+repeat until true
+pcall(function()end)
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=lIBCDEFGHIJKLMNOPQRS or 21 end
+for _=1,1 do end
+local UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu={}
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[1]='dVxLdEQKWGVoT3FqdkRJDgxMUQxMDF5uBVVMC0kPSFILdkhEC3tNaA9OU2pzR14OclFvdFwLSWVEeEtcC3paXAtwSFl4S1tSVAhbaklNZ25rcFYLWUtbd3NVUk9ZUVhSckkSUlQMcWUMRWduVEVsbhZLXm5zUWkNdghZBAVWVG5cBAUPDFNZRAwIWE8ECmhceEl2DFFKSFIWVEhoBAhnZXNJbGpEZQ1oaFMORHtHaURUalRPD0t3cX50SQxRDnREcE1odER4S2oEDE0MBVVpbnMOW2pZBFxNRHF3dERxb2VJeFduTlVfanN/X2VEZWgOe3FvW3hNbndUCG5ualFcDVNqVVxUW1sPRAQWXElUS3QLe0xcWVtuDXhVcQ5Ed08OBHtMDnpUS1JwT3QP'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[2]='fgRfDmtNTA5EZ09cBG1fXHZ5bg5EcWllDVVMbg1UVXFccFRlTGhXaGpPbFJMXlFqWWlSalRuTg9JUXRuTFlYcQQMTQteV1xPcE9Nak5NcU9MEl8NbnluT1tqSQ9EBHFuWWUMT3ZxbEQEflVxDVNrC35+Wlxue3dxSE5XaFF5bk9MbXFcWWRQD2UOXw5YU2RobnZXDURxbGUERVlSeFVbDVlpTE1RTlFEa1ESUlFPallEDlxoSVtMagxJbg5MBGxPSFN3D24LU2gECE10TGdbblhJXA1QWlVxfhJ2TwsEdmsMd19xe3d3ZXpOU1IEe1txBE5IZVkFSXFyT2dlUWt0Ukx4TmVrElkEWElvdH5HW1x4VlcOU2lMTVNbWWpUFldlDHdqaExtbgsESUwM'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[3]='DEhVZWtwSQ56SWcPTk1pW3YFU1J4VVJPbnJXDRZXTQtrCFhNaxJvW0kIcQ9zURIPRGRTd2UKZA5balcNUFBUTwRTaGp7CGtlREdcdwx3T0RqUWxqWVleD3YEFmpJexJEa1dcXEQEXw1baXFScklpaAt0Uw5QU2RPewgOTxZOTmUEf28LC3NuDBZNbERWUVl0Vk1uUn4MZ3RUawVESFRaZQt3d0REBBZSdkdeRGtTcWVZTlFxewRYTV5MTgsMCk8ORARSC24FWnFRC0tSVG9NaARJBAtZT2V3ck1cC35zXnQNUVJoek1Yd1wNSVtEeFRrUEt3D2hVUkRlCnZqaE1oaAxND00EU0xlC0VbXFhaSGVRb2RlXBZVan4OW1JyVV4LWVNbC0hJXGh6T29P'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[4]='BFFbXF5Lbg9JFksPUVxXZX5xXA9oUWwNWFdPC0hWVw1eV3RSTHBUbg1JUg5RDVRxSQRvUm5tT1xRVXYOVGlndExvdwR+DG9uc01eXHtzBG4MBBZEUU13XElYS3RucFoNFlBOCwRWSGh+C1pxa1pOcXN/Z25zVEgMWWUOdwtxam5+cW5lRHdnalx1WHFwV3dcSXdkcQR0S09EckhqVlVSDXtVcQ5rCm8EdkdpC25ES25bak5uWQhlZUQKZQ1+cWd0e0tMcWtRTW4NU15cZQpsC3JNa2hoSXFPUExaDQsIalxUXEtEfgtOaFZRW3EEUW4OBE1ND1ZTDQ5JcWcPU2tcdwRVbk1+RWdSeExaZQR3Dg9EW19bXklsdERuVFwNV3ZuWURIDkR7blJ6SVho'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[5]='ZQVLC3NVTE8NT29ca3doD1tndwxOTlpxcEtvDGVHb2pMc01oUVdcbnhMTmhZUlNoDFJJD1wKbE8LdwwPekl2a34OWU9cRWQNa3VlWwsIDAteSRZlRHMWd0xZUnQMCGRlBHl3W0RqVQ52dQ1EbkdpdGt/X2hJSlplBVpVZWpMS09Rd1hoTFtkDUllaGVlREhPWV5URFBOVQ9MZE5xc393ZQttTXEFT2hSBBZVD25HTVx7dFBSa1pVUnt3DmhITWRcRFlkUkRYSGtoVXYMVARcWUQKWQ8EDE8PD05aXHsKa097V2l0C35XDmsOdGUMBGREWUlcUmpJbgtRCmoLSQh3bhZVXGtyVFd0BFBVD0xnXnRRRFQOcwRuZX5tWE1yTXdqBHleZURzbFJ+Fkhu'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[6]='XHFfUnBPW25RcWV3BE1NRFx7EmoORWwOTBJkC3pTWHdEZ1IPSE5TUm5FdFx+REkEVApSXERqSw9zU2gLBE5LZXMPWg1IS28PXlFfXHtVWQt6SVxPWEhaUklfTGtJeWwOBA9OD1tvZA1JT1ILelMPcXZzbnEFSFRqTGpJcVhXb0REaU0PcwpYcQsOTA0LClJuXHN3ZVNlDAsFTk4PU2sFDwxWVGhEa1Jldm1uDAt3b1xwTQ8MTGdlT3JRdg0PUw9Zck90DVtrdg0LR1hNa1dZRFFRZFwNU2toBHBRZVNkSU9RS3cPe3VoblFHW3RzU3F3a0dpUn58VWVbX3dqZQxca3N7W1JcSlRuSFEWaHhNTGpEDmoNc39ud2sKZEQODFxZSQ9IDlNvZwt6VEkE'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[7]='cE5aagR1TQRrUkgNSQhYTwwMW3RcdWhlDHtbcUhXdw5ZaU0MWUxQTVFKVw9lRFcNa21pRHtITnRMWVsLbghrC3YMTGVbb01xC0VMDXJVW3cLcV4OelV0amt6S1IMUEloawhcdwwIdk9RTWULDFdsT1FPdnELcFRZBVVnblFxWGUMCGsPXk9uaHN1DU9JV08OVFlvDlFZBUQLfEhNfgxMD3NFdHQNTkh3DU1obg1JXHELcEhuDE9qDVtrZFxZS1gMXEdsdFlvdgxcDVVqFlMOUn54VHcWVU9EZQ9ODkwOXEQMC1AMDFEST3NXXE1rcWRcDH9PDwx/W3RuElxoTHFqDXhRX3RJb3RSbnN2XGUEZHQLflR3SU12ZW51WE9celRSW15TXAxLZwwEDFho'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[8]='aFNZbntFTAx7e1hSUWVcDlFYV256VE4LDHdlDXNNcXFMaVxZewVTaH4JU1J7DllSWQ5PdHZHbgt7UFcLXAQFRAwPVw5oV14NUXFsZVBNa2VZb1lbVEdPWwQEBURoUlB3DFVPW3hRBG5QTVhPXkxIDlRrX25zd29uUFZadA9aTlJlCHYPa0tcTWhPUgtTX3dbDgtWcWtzZFxMe29xe0t2DnhWSA1UZE4PVGdPcURbZw9zR1lPbnVnRFtZbg5RZ00PFk9uTUxbZw8ETEgLbnlvBA1WS0R6VlV0UExOD3JRBVwEBGdcclVuTWtMV09Reld3WQ5ScQ5FbnFTZw9qVGdoTwxNXnRcBVQMUFRLZVtnDltYUVkEBG1vZUlJW2poUkgOSVlnbgsMBU9UZ2UL'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[9]='TG5aaFRHZ3FQUU9qREdMRGt6VFlEexYMBE10aF5Jb1J2dlRxdnhIDnN0UA1qSUwMZQhcaHBPXAt4TVtxXHBJaHsFSQ5udQ8MTk1uXERzbHFMDVQNSXNNbg9SUQ9MZE5oVkl2RFBMWmoMbXYPelZObmt1dgtRBF9oWE1PXG5tTVtrSVwPc1dSZQsSZ3F7U3EPc3NeRBZTT25UBFhxD1FpdEl7T1twS1xSVEdMbltsVVxbZw0NTlNlanMFWkRRVV5PDHVranYMEg9OU1JlTktPC15QVWVbb3RqFlF3BGsFSW5RFkhPRGtpcXJJFmhoS1tEdnpODw1MV2UMU09lVFt3aElSS0QMf15qcwRxXEhWVXFECmVoWEtpXHMNVE1Rd2sEDU1ublNeTg1Tb01E'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[10]='Vk9NcQ5Fbgt4T08Oe3NSUnsFUU9zTElPUXVrDEloV1wLdkgNZUVfDgtxXmhzDE9cDHdMTVwKall7V2QPdnxXXGhPd2gMTkt3THZQDHsMWVJJBEx3SWhVUg4LSQxzR25NSQpYTVlfbg8McXYLfkVYcU5RUmoMCFwPcFFNRHZHTVtRbXFlfg53W1ZUSGoLc00EbnBWZXBXZEQLfk5SSUVNZQRXbg5wUWkNewxxD0lOSER2CmlcSFVSD3MJSFJWTVhqDghfDVFnTE1EeXRcc1FNUgRLTA9ZS2RPUXtPZVNuSGsMeFoNak1cUlBLW1tEZUxZfgp0cVlpdg4FUwxqe0d2Ug4LUWoFVk5lfgxNblwPTg5oTWp3TkkSaF5LXmoMbXENSFNSUmsNTmhITksN'
+repeat until true
+do local llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=604 end
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[11]='VkxWbltYSw8WUVwNDHcMDAtxdGpEZ3RqD1FZD1hSS2ULcFBSUQp0RGtOV3F4U3RxTk1lbntXXFIODVRrewpbDnNxbg9EDFINWEt3XHYMX1xITV9Ec1dvXHt6SQ5yS19oVGdnakQEWw1oUWdEBG1xXHtMWg0Ec29ETGdMC1RZUg9ZBF5ue3dubk5NandYTWwLbnFbT0x4TmpUZQxqe1VxaHpJWwsNSWRSC3sSXExfbwREZw8OUFNYalkEXg5eU1xNWW9fUnZ6SA5RdlQLa0d3T1wIbwtrSU9uVG9NaH4LV0RTZ3F3C21PDlEKbk1WU1xZU2dSD25tbwsNURYMUE0MXGhISGpOSXFlbgVTDg5FZ3RZRU0MDgwWC1tfawQEeWllDgtLD1lkSGVZaFRP'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[12]='C3hIZXt0S3FyU2Rxc0duD1ZaSw4OD0sLDFJLTxZNdA1RX14OWQpoXElNXAt4UFQPcwppRAR/bk1Mc24PWQwEdERlDw0LdkhuVF5OcXJPbgtTWWdSSFBUDX5/X0R4TlRlXAxcT2hLWFwMTFRoDHtnBHtISGUFVFdSSXVeRARXT3FRbU1PBFd0T2UIdGh2d09SDhJcXHtxakRrDmUPSVZOUkRtTE8FS3QNDg4PD1lPdg9URXQPWQR0bmUIWXR2ClJSe39MDkx5Z1tJEk1EC3dpDgxKVQxEa24MCwQEC15OUUREb3RlBElnZQ4KW2UWSEgNUEtkC2tFbwxMZFNubgpndH4JUA1RfFRuTHtbcWpPX1xRdw5PaE5XD1Nbbw4PU00Pc0d3C3BSSXFUZFNx'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[13]='a3lkbl5RTW5UCG8ODhZURGhJZGpEW3FSWVlkalFpcQ9Ma25Nbnl2aklXTWVJeFVldkVYa35tWWpZR3ZNFlVndG5HTWUMRV5SUE9kXGpOVw5URUxNcxJsRAsIZ0ROSUxce3hOaARtWU97c18OWVRXC2UFWmVEDE1PWUtfCwxVdk9IUlBPcFd2bkRnXHdcCl9bFlRUa1RuS2pER3ZcW1tncQQSb2pwWlRccw1Vag4ODE8NS19bDAprT1ZNb1tJdlplTFtST1FMSQ5uc2wNFk9eDnZ7Xm5Tb25ZeE9xT1FJBA4EbW4MVlNZdFlnd24NUV8LUU9vbkhOUAsWSWRPDG1McXsMTXR7V25xbgpsC3YIak9YU2sMZQRndHhUVwtrR1xPVk1xcQx7WURrCVBx'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[14]='awpcanNJZwsLRV9xawtQXFFUVGtIUUwLD1FMawt/TU9TakhSawtTXA1ND3dyVFVxWQ5qT1lZbgtZZ09cTAVITwtHW2VMcUxobgQWD25tb3RlCGkPWElpC3YIZHFzEk93C0VxT2hMVw5ZX29uWE1vaEREVw8WV09oeElsDXtJdHF+fkkPSE5VdH4FTnRWVVJSSXFPDkRnDG5RZ25qekl2REwLTlJRR1gPTHlnDlkLUQxrDl8Le0hUd1QMZE9+REh3dndfbgwIaXRRbFdSBARxDl5JdA9RZXdce3ZIDXN7cVxJTU1PVFlMDUxtbwtEBHRcDVNNCxZPUg56U3RqfghcDFlnd2VyUVxSTH9PRHBWVA1OS14PdgVOUklpXw1QUElbRAxMDwxXTURJR09x'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[15]='clV2XFBNagtJRFUPZRJ3RFwScXFrDBZEcwhlXA1TXE9JS19oFlVbXElXWHFJeWluaktpaFhNbgtZU2RoBFFbaFkWVQ9JS0xEUW9xcVkKWWhTZ2kLXHxLUlF1DnFlCFtEawhpaHt7bmh2e2RxBFJLDVNrX2hMbEtERAtUT255dmp6TWhxWQVTZWtJEmhRRFdqXk1ecQwNSAwNWlRxfghubmUEXm4MRWlbalN0ZX4KdwREBHYLc3JLZWpOVQsLR24LdnduTQRRdGhMb08Lc0VNcVZLUnFyUw1PSVtuRA9WV3dRFk5ESWxIXHYWSVsEd1huSV9xcU5NdHFrWlRNCwpkRAttdFxbX1lxc3ROblRfbmhRW2cPU1haagt5TWprf1xSSW1cagROTlxqT19u'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[16]='SEtcDXNPdg9zTVxqWFdPXAwSbwQET29xaE9SaHJVUmhbaFRSRHdlDkQKa1t7UVxxWFNxd3JPXA8ECk1PTHFMZQ1NDXEPVEt0fghcC3BWSE9rcxINeE1SCwx7b3FRa2x0VlJQWQxMUwtuDUsPDU9ralQKXg94UlZuUVN3DntSSFlIUw1ocklZT34IdlINVlRZc39NUgxwUW5zCUtlRHdfT1FvXE9rBG5PREVxcVlRUmVbak4PWQpoDVNnTURudQ9oelEWa3hVZwR7d3QPTlFbXG55d3Fze0xlWWdld3t3Z1xJU2hEc0t3T3BXbw97V1t3c3dvWw1PX2VRWlQOBU1uD1EETERYS24OVG9SC34IT0QMeXFlVGt0RHMKWU9ZUkloa0RIDwRJd1wMcFpx'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[17]='WVNoaFtoSw9YWlRESWtvDAwSW2UMT1JcVk1qWXNWSE0ETFplaw5nDkl+VVtZUwxESWV2UkRzdmtzc3ZrdkVeTwtxZA8NTEtofnBacUkKaHRqV3ZETHtkC1RHTXF6S1hlFlF0cUxwTgt7TlNuBHFYC1BUSw0ETXENUFpXakRZdgtJBEwPbghuDXt7EgsEVFdEZQVLW3pJZA9ZCG5uSE5IT3JLTA92C1FERFxXT0lzdA5EalVxSX9NW3JMSVxwTFFuWV9bd3Z3DGUNU14LdgpuawRPblxYTFR3RH9YDFNqV2VYURJqTktMd1BUTlxZVUxqVF9cTVQOTGpMCG9oUWsFXEhQSVIETU1xZQ1JXG53dg1IUw1uW2lPDgx3WU9wUW5rUXVSDhZWWmVJSE5l'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[18]='bnBXbgtzblJUWXdcbnt0ZVRnaA0Lfk5cW15XXHNPaWplElJcbnVlT0leSAtMWFpEdgtOblELUQt2bVwOXBJPblx3dgsETWtbRAwEDhZRWwt7dWhlfkRIUlFFZwxzT09uSXdnD0hPag97Vk5cC3tcalZVbmVMBVNqSX5JC0lMUVxrcXdlD1MOD1kITGhRd2QNBAtOD0xEWg57UW8MC39pDlFMS0RuCGcPU2sWakkFSQRuDmRlewtabgwPSQ57R0xZSE0MT2sMX2h7RFp0dgpNW3NPbFJITVhZXHteaA1JTE9Rb2llewtTbgx7cW5lR2xoBEpaaHNOS3FRZ2tEBFF3XFhWV3cPTlpSDVZJW1BIVERcdWplWVt2UlNpTEQMTU8ODgxbDVNfa3FRaXZq'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[19]='cklMT0lwS3dJa3FSclNcRExkSHFJXlR3TARsXA4MX257C0hcDFRaTwQMd1sMCFhqDHV0XElZZGgLfktoTF93aFlRFk1rVU1ue39MWXhLcXdzEncMek1ZBFkIb1tqU2p3VlFYTVluS0RrSlRPDElZRFEIDVxUC0tqDEpOXFkSbllZFkhrXAVIXFlLUm5Ta1kMRA9aRGtwWg0EC0sNe3tcWXYIdAsMCnFPe35Ibm4IamVJflRcWFVPRElXTAxTXkhoDgRkDQQIawxcR2lxD0hXRFFrblJ4SFULWE9PZU5QVGVRalVoC0dMDlZRZ0REaV5PRGpOUlFNXnFudXdEewlWZUR3DnFyV0xrRF9NBAROUw9Ta0wNbgQEWwx0U1x2eVxoexJSDw4MUg9oUklu'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[20]='FlRLDlteTm57V3FqBBJuCwtxUmp2CGoPUQtWaHZxWA1eUV4LfgpPC1xwUQRREncPSWRRW0kOTWgEeV9EVlJRDAQEEmgFSFp0RBZIRGpTDAxEWXZlew9JRBZRX3RwT3dEXkhLW2UEbGVTb1tSbntSDgQJS2gPT2dPTHZQUkQEbg9wVXYPRERUC0hWS3FqTFBueE9qDmt3DVx+FlUOe1dbDQ1XcUR7S09lWV5IT3N3UnFECmdlBUhaT0RtXA12DG9cUQhvDgt7bkR+EmdoC0RJDm5FbE9ba09ce3lPdw1PallufEhSDFNrDgRtTVJUaV4PTGpOUmUMEkQLEllSe0dsalhXWERMDmcLSWRJZWUKawsWS3dEBHhadGttTXFwUw8OSVV3T2VFT2VoSVhr'
+do lIBCDEFGHIJKLMNOPQRS=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l or 432 end
+repeat until true
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[21]='WVpOalNlX0RzD0sPXAxYDAx1D25EClkPbghuUkhNd1JRe0wPa0kWa3NzFg5YTWxSTHpaC1x5bGpZaldxcwQFRFRnT2pIWkkPRAhfcURzdg1rR2xuVk1NcWtJdmp2BG5SRGRLd0QSbk1RaFQNdgRxbgQIZG5MRXcMRHcOcVZTaGhRbXFSBFRaUgQIWWV6Uw9cFktsaE5SUQxECFJlbntMbnYFUG5JSU93WRJMWXBTcW4LbU1qC3lbbmtPUnFrd2xcTHRTW1lRWQQEcXdodnpVbgwEbwxRUlNxD01nRER/X1wMCGsLelNPT25/Xk8FUU9lbhJnalQNVVJEcWRuZQxMWQxFdGgWTQ1cWVFbd3JaTg0MSWwLWV9YbnpOSW5TWVkLC0dnZUxpTE0ECmpS'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[22]='XktfDwsIawt4T2p3SU12aA9PTFlYT3d0a1FkdFFRcVtReVgOfkdxW3YKanFJXFcNFklYZVNpdgtyVklPcElsUgx4VQRZVWQLBH9vBHNTagx7Vk5oSE1kXAtzXg9zEnR0WU9MaHBOSQ9JU2pxakhORBZTZwQWS010UXxLCwRwVU97cXF0eldNanMJU1xyTlVxD1BVdHYMdGpRVVh3SW9saFwSXw1EdWplTHBQbklWVURTZ2cLTlpIUkRfagt7DHRqXARnREwWTkRYV3dqTHFYa1lbXwtuClhuexZaUkRfX2pZDHRqWFNrDAx7BFtQUEtxbkV0cQ9RcQ5MfEgOSW1pUlx+Tg1QUElEWWdnUlhJbFxECFkLDA9OXFtsSFlUR1t3Dgx2d3ZFcVtRdWsP'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[23]='RHVrC2t1XGoMEndcRERXDQxLW2hZTQ9ce0tYUmhPZA17elVxSQ4MWwt3TQtwWkl0WVVnaHtNblINU2QLSUVfW3JTWFxEfld3SFRaaGhPTXFwS0xSSQVVUkxYSA5rCmxuTGpJDlRZdw9UWQVEXlpLanYSTXRWUVx3VBZUWVtnaVJQWlQMbnd2RHNOU2pRdlBSUQ5YC0R3cW5zBVYPSQVQWXZ8SURrdE4PBFNZcUQSbFIEeW5celVsD3BTTw5cbU9bVGd2T1wOa3FEb1txewhuDHBIVFx2f2xEXlJIa35zWGtyUVhuc3dlDQ9LWHd2Ck0PVA9LXHtHW3dISVhcUXMSantPZQtUBAVEXAp0ZW55TGVEZXFPTH5aRAVRTVIEVXFqZUdeD3pRXA4FU3Rl'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[24]='XApbDg4IWQQMEmxxfkpUaGtLbkRlClhSDggPRHpPZAsFUlZEa3BVDFZRWE9zTWtuVGxOaAtyWg54SXFqdghcT1ReUA16TWR0dnZJC0kET25Je1xSbgpSakR7Z2VJd1xEe1N2TWpLTGpzf29qTktpZUllalwEU1lxUFpXbgxOVVxrdFBxRHlcTxZNbwQNT1hccxJ3Ug1RcQsOC1QOekkFZUlRdg9zTlZSRFlpD0lrdG54UXdcVGtbakkEBXFYVU0OTAxSagRJb2poUEhrXHNkaHhQSVJ+ElkEDVVvBHtLdg9bX2luBFZabn5td3ELeXZuSXNYDlQIbwtTaWduWQxxcQVWTgtEb00MWW9sdER5W24MTXEPfkVNDwRLT3RrUkkPWV9ecVlpWFJ6S1t0'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[25]='TAlOdFluSHdRW1tESQhxdElYS2hrCmpxUUxVXH5FT1wNT2d0SVFNbgQJUw52eWwPaE9pDXsNVXRQVXF0SE0OW24Sb0RZWWcMUXl2C0xySA0LRXcEC0VYWQRzZ097T3F3REVNblFXWVtJc08NeFESblhXUk9zRXRSewpMTUxbTHFTa0xZdnNpXEhTUg5EZXQOBEVYTwVRdHFJVFoOc09qcUlZdg1USlVSUFFvUkxZTA5rbVxEBHVPd3JXaVt2clQNBA4MdGsEUmpOS2RxUXBLaFBOVG5RawVSFlF3BEkOXlJzTE4OVAVRBFwKTA0LDg9EawxnalleS1xMC0hZcwh0C2UKZE9uBU50WEhIT3BWSQxEalRrbkdSREhTDnR+DmtEew5kXEwNS1JwSV5q'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[26]='SV5WcWhJX1JRTlANDgpxC0lTaFwPU2tlSVdZRAx1dw8OCnENXApMXH4FV25+c1tbTk9kXH5FbFxZDmt0WVdnW2tJUk8OC1pSSFBIXEwOD2hudVtqTHFbXExcS1t7cVIODAhPaFQET1wPUk4La1NMWW4Oa3Rzd1gMTFhaT0haS1wMdQ9PRHl2RExwVWgOCF93C39sZUkSbA9IS3RcBHtkD1kSbA5RbEsNSQhbRAxxdmhJXlRPSUpLdA5Hb0RZXE4Le1MNXElJaWpRBVNEfnxaRERna1tySU1be3VnDAsID25IV1hPD0tZDER4SA96TWsMXApnaGsJTm5JWVt0BVdbZX5/bgtqV3ZPelVnXG4IUnRIS2dxSRJYagxzZ3FJUWxuUEhUT1kKZFIMVU1S'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[27]='UQxcbl5LdGVRdlcPDHZUWVFZBVJzS2lSfgpnDAxRXlx+e00Mc1NSaHN3a2pECGxPe0haUhZaVE0FUVJqSFNnanYFSHFccFBoBU9xCwVNXkQNV01ETkhUbmpOWnQMDmgLalVeRElxaVtITVJ0TGtxcWUEBGV2Ck9PBFdnD0xqVW4LCk93RGhLZXtXdlJRf3FxWWdbUmsMcXRITW5uaw4McQ9VT3dbXFNoUE9lUlFTZAtzSlVEWWVlW3pVcWVEb19oUXlxblx1cVJyTVlbe0tMDXtOU2oER0xPWQxxDVkLSA92fkhcBHUMcVx1WXRzBUhqSXpJBFFbWVxRX2p3TGRRZU5LUmpzCl8NDkVpd34PVWgMeFRofnFkaARxUg9JU2QLcFNcTVNnDEQWTWtl'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[28]='BHhIa2sSb2gWTlEMfgVIDVlLUnRJb0xlcldbC2USdA5ZCmVPdnVrD1kEFmp2c28OD01pcURlD1lze28LXAVLbnpLWERIVFRqDUxXagRTT0R4TlNSc3drBFNlaHFZDmdPDggOC1kEZGV2REhcC3BJXFlISAx6T1tlTGhUaBZLaVx2f3FxD1VYWXYIDQtZX1tcbnRIa1kIaG5udQ53Vk5LTxZVWA1wSFUODAxebklNawQOCUtPWRJ2DllrTWoLd2hxBA9LT3tSSHFrVFdPexJNWwt1TE9JXktEXlFxC0QKaW5zfFcNC3UObkhVb0RrBBYLc1pXD3pJZG4FSRJPe3FqDXsFUQt2dQ1uWQ9JDmtVdkRrU09lawxsaH5FTQtUX01EVGhOdAQSX25bX28E'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[29]='SUdZdFlVWWVMcVhlBARNaGt3DQ1UXFF0dn9uDWtVW2VYSQUORG9PW2tLT3QPS00LTlZXDllQS2UMD0hoaklnXAt/XlxlDnFlTFtSZU5Nd1wMT1xNSFFbXHpVTE9OTlEOa21scXZ5TG4MTVlbD0tNRFZPcQtISV5qDG1YdxZXTG5+R3REc1NPcQVWWmoMeloNaw4PbllLZ2pOVFVlXAtRC3BJd09rDGluBHlZBGt3WFIEdFZEcxJnallrXHFEX3ZuUFZaT0xZaXEEdFBlewVLaFkST25bWFp0a0VSdFFXWw9rT2gLRGVNRAt6SA9JbW9uUFNkZVllT2gWS2RETH9vZVEODltRBHQNclZXD352Uw1zCm5rSFNfDQxVTE0EeEkEUFd3BE5RZFJRZ2pZ'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[30]='U2VlansKcXQEBFJSc21xC0wLU2hZXlNoc0VeD0xpZ3R7REtSDVd0RFhRZA8LBF4LU2lZUm5FTAtWTXFbWWhaDVtpdwt7cE5SRG5VDHNJZAsWS1hqXHFSDkx8Wk97C050RHNsDXhIVQRzEnRqUFpJalBPZXEEd1tqUURIDHpXXFJJZ01PTlpOaFlVWXRUa3FEBHVecVtrdw9Eb01xBU5VaHhJXwtEeFdxRAxPbgsIdHF4T3YPbgpuXERfZQsWU15xelFSUkxtWGUORU0PDHBXbn4KXw9RXlN3URZaC2t8VA5uf1sPSUhUDnNOUQsEe19oDHVxdGhLZ092f29cD1ZUDg4FWnRTZQ50DHdrXHZ6SQwWSQRPTGlNT0xpcWhUZ29SDVduT356WnFUCFlP'
+pcall(function()end)
+do local _={55,36}end
+for _=3,2 do end
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[31]='UE1ebkl8Vw9OSRZ3awRPdARRbk1Ta1tPa1pLDnhPd25cbWkLc0xRW0l2U3dzSU9cewpZDmt4SGVcRVtoRGlMblx7BHEWTFdbC3lebkREVURRa08PCw9URFxzFmpMawRuc35LalFXTw9Tb25lbglTaERtXFJuR00Ee3UPZX4FTg8MdFZuDEkFXHN+Tg0Mdkhodg5PT1NfUlxRaWcMSW9panhXW0R+dlRSRFtnZWhTDQ12DUgPa3VxdFReTm4ETVlua01lbg9IVQxRZw5PBExXUm5/Xw9Rb19obkVbdF5LTVxyUFpSVAxxdAsNSA9ZSVxudkdxRHsOXEQOElhqSUxXDn52S1xQU1lqSXVcT0xnD2gOEkxNWQpbd0Rbdm4OBVZuSX5XC1lqVQxZRWdb'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[32]='BHF2bkR+VQRMDnZPUVhXdwRHTw9UZWVxTk9YZWtHWQ9JSVkMUWt0dHsMW3FMEmdSUVpIcUxxT256UkgNBE93RGULUERRU1tPFk5XD2hNTWpEW253C3NfUnJOVE16TV5SURJbXAVRWAxJWRZlRG5ObnBOSVJOVloLWExWXHt1DA4FT2tPC39YaFBPUmhZBGQPSVdvC2pMUWoLBGR0WW5XbgRJUnRufEtuck5aZQVLblJ2bXRxdgR2T0haV1sLCA9ZU1lPRAxHdm5eTlEMSUpLXARNDE9MXFNEFk9cXERFTQtrT1hPUU0Odw4FVFluRFpEXAhsbhZNW25rf3Z3cw5bbmVETgsMVE4OD1dxRAwKcVtMbFpqDFJWaEkFSGVJVV5EBUtsDQxPdgt2RFRP'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[33]='ew5ScQRLX1xMDk1qWFF2DVFrWGpJV0wOTGlcT3MKTw1UaV8LWFVbDVNpTA8EfkhPSE9MbnhXZA92ektoBBZIDXpNW2p6Uw5SC0dvZX5/WQxJREsNc0xXaA4MBG4ETktlelN2DFBRaXENV3dcdnZUD3tRXg1WVVxlSQRbcVx2UGhRRFV0WFNcT0lOSw0NT14LRH5JREhNDWgMBFxZW2Vebn5KVGsMFktbBA9XRHpVbA5QWk5cUQRNXExnbkR+CG4LC3t2aH57cWpJCGwLWRJ2d3JJX1IWSXZNDExIT0kJUAtlDGloDAReDhZTa0RUZ2V3XAx2bnJUTkREX3dPSXBLd3NLWWVZTFd0cldNDgxTTU9ZEmQOVGl0cVx/WGpZBHREdnJLT3BUV1wEbW5r'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[34]='DVVcUnhTXA9ZDmRlWExQUgsFVGtMflQOSVhXDn53XmoMd2gPSWtxaFBVd2VzdWtceFFYZW4MUnReT2kNbggPcWt8VFl7UVtuXklpUl5OVU9MbVt3XEVNXExxWA96VWxEcw1UCwsMXFJJUVtPWElbdF5LTw57DF5lZURIRFlnW2VYU3REbntfdwR7Tw9ZBE90UQVJD24MXERbaU0Mewh2dxZXaVJeVVJla01kXHNLXGoLcVJSSFBacQ9XdnFRaxJPBHNYRElSU3dzdlEEZQxPcQVISGt6TlB3BUkWTVEMcURZD1UPektPRHJNb1JRBBZPc21salEIXAx6VVllBE0PWQt2U2UEUEsNVFhLW2pXXwtRDGxcclBUXAxRcXReT28EVkhODlhLZA5cdWVu'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[35]='c390cWt6VWhzT3ZuDE9ecWUSaXFQWloPa3NbaGpJWE1RRW90ewwEXG5Hdg5qTXdlD09Ya1FzEg5ZT14Ne0VndFBTWXF7S28ObnZJakRfZw9ZZVxEe1dMd1wEWWVMd2puREVYTVF7aXQLC05uUXVoalRnaFJcc2QLVF9SalFPUlxQSU9xbg5qT0RvWWhZDllbXlpOXHtXXE8ESWRoSQ1XDnsKdHFwT25EDglTD1RpdnEMcE50e09qD1RZb1wMT3ZED01sDltlWGV7BUgNTlNYXHZ6Tg9RCE9lTlVSDVNnW2pZWVJlSW1eDVwNSFxMaFRcdnVfXEx/dA0MCUgMU2dYDUkOTw8PSVhua0dbCw1NTE9MDBJuaE0MaFlfZW5cfEhSSXNNdGhLZw97dksL'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[36]='clVpcVRHbERuElgODgpPW1ZTWw1uBAUOTHlSCwROV2VMRXFEBU1xTw1Vb3FRZWREUUd2aklFbmUOFlRZVGRLT2pRW1t6T0xSDE92blkID25WUU9EU1luDhZITk9wV2RqC3lvcQRLdnFRb1JlcE9ZUl5Xbgt+dXdEZUVMbgt2V2UOR01bc3VeDRZLZG5JDgxPVARNT0x2SVtuRWdPDHJIC3JNWA1qUlBlU1lNRHBXWQ5bWV9uaFF2CwtHbmpMSkhSVFlPC3N1dG5YTQ9re3FuRARXZA1UZ08NU2hLdwt7X3RuD1QObnVeZVFfamgPTFQOfnpUDXBPTGVwS3YLTG93RFEJSVxTW3ZESVNxCw1LTVt7V19lWQpoT35zUm5JZEtEbndqZXtzaWhRT2cE'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[37]='ZUpIRH57EmhWS19PVA1UZVZRZHFJSV4OcExUa0kMdE9ISXFPSWRLDQ9TDlxrR3YMewlTanN2Tg9QVFVoWFNqdwt+WlJrC1NqBUxVDAxtbE97dFMODgRZRHYFWg9RDkwPDFBICwwEUg8MTFVobn92Ukl3WGpJeW5qBVBLUlFRdFJoU2VEVA5rdEQSUmUNTEt0e3FZdFx3bFxceldPBU9qWVF4SE12R00LUFFxW1lfTER7FlpEBFROUgxxXA9Md2dqdghPdERrcXdlREt0fnFcDFkITA5zREhNDApccURbWW5Jf3FEelFbUkRZXGtTb25uUFRXT3ZFbm5ECFxrD1NfT1lPdmUODFJlBFduXFFcV09MdWpPcxJkbg1SVkRZDllETHlcDAsOdw9ccWhu'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[38]='UUpUDmhMWgtrFkgOalZLD0l4WnRrdQ50UVhIUlFFd1t2f0wMVEdZD0xpd09YS25ZcwVRZQR2U3FWVXRSU2hJUgRIVGpJUW4LTHlvBAxOSG4MSWRlUU1lRFFHTWVbbEhqSWpXT3sIblxEDFlqeE5Van5EV257BVAMSXpLaGsPVA8WWlpSektpZQxJBQ0MS3dlcE9MaGUNV3RZBVdlCwgPDH4Mb1xMRVtbCwlQaGhJdlJzdVtcWVxVXGtJdgxTb2d0cxZXdEx2VXEEEmxcWRJPD1lnXHd+cWVqCwpvZUxnZ3FUR3RcUVFkZQsEbnFcCnZZVGd0RHNzXGgMbXYNTlMNDlwKXnFZBVVbSVBVUgsKZQ9cR1l0UU1PbmtHXk8OCHZqSVkWa3NVZ1JwS1hN'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[39]='UQxPT1lpT0R2Clxrc35IXFFHd2VzFklbD0lNBAQLVw5Jf3doTApcZUlPalJREmRuRHcMblxxa09uCllSSXxJaFtlX2V2FlpSa3BValBRBU8ER1huWQxvcQ1MVmVTWFdlckxXaERnWGp7U3ZoTGdkbnNVW2prS0xSSWUObkQSX25Ee2Rla1Fkan5zBXFZVV4OWW9sUkQSdG5RT2VxFkxabklkUGVYSQVESVpaD0lfUnFoU1lxTERIRHJPbmtbZFN0SUV2DGtPW2hUZ1xqfkVZdA5FZ0R+ek5lFkhLRERrEk9rDFtcUE9fbnJXdk1eUV9xSEt3dFNZUg8LcxILBHNuUnZ1d0QMU19uU19ZaF5VZw57WkluTkt0UgxUVG5MZ2cOeFpLalx7TXFRV2lE'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[40]='fg5YZXZySWhQSV93UE1eDlNldmtWS3doeldvbgxJdGh7Cm9qbg53bmtHWVtWTVxce3JUCxZNdmpMDncPRA1IC2sEFmhzdEhreFpOdFFeTg9udUxSFk1YTwRPancLdldEfkpVDF5TDg4ER1gMC0VSRE5RZ3FJc3dEcwRYZQRtX25WV1tlTH9MaH5zZwxOTXRSU2paDlxxbmoWUw0Pdg5qTXtzBAxOUVxxW29McXYEd0RJR25NWUVST1BQVA1UXEkMdntfalBNdmtJDkxxW2dnaklvbndrBHZPWE1lDQ4Ed3FQTWcEc0lfC0wMZG5ISFRcc3pLUlRYSWhJFldce0hIDARFTWhzT2QOXARYRElTD1Jcd1lqXlFpaFkMdmhbXlBcBHBQcVZSSQ9ucWsM'
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 500 end
+for _=1,4 do end
+pcall(function()end)
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 656 end
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[41]='W1hORExtbm5zfEgLak10D1QMBEREd3cETldncWhTWVJbaU1cTHNfaFRfZVxbWVtPa01fDVFJbwxYVkgPelFPXGt5UkRJRVt3UQtRBHhJcQ9rDnRSTkxIDn4ODnF2dElESE9Ya1RlXGtMX2UOa3ZOaEwKW25yVElcUVNrDHZtbw8OBVplVAxsC0RfZXFMa2lbURJvC15Td25JbVtScE9kUkQETFxIT29PSW1fRGsMXlIFURJcU2V0DQx0UE92f1hqDkdNaEltX2hwVkkObgtRC2pTWwtYUktxCw1JblkIaWhUCUtqUFRUUgxTUkRMZWVqXApZcQsSaVsOCAxSBFdxUnNTak0Ldwxqe0dZaEQLVQxECm9PXlNnDnpNDA5Jd1loc1NMWXhTTQRuf2RE'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[42]='c1V0D05UVA9ZZ28LbgQETw4KT1tJBGRPUU1xanhPZWVRX3YLDUlsDXpNZEQOD0hrc3dZcWt7FmV2BVdoSXcOD3t3d1wECU5SdnlfDXhTZGpRf2cOBElSDhZNWAtYSEgNVA5eUlF7aXdzVU1qUUxJXER3dw4EVWxqUW1caHZxa2gMf2lPc3hLcUlrUg17eEtcbn9vT2haVXRJZWtcRHlPantVdHELdEhlCw5qbkwNSE9yTlFbW19eDgRESHdTZWpuTAp2ZW57b2V7SQRuSWsEC1F1cQ0MV0xcWUtZBAsNTnRrT2hPSXtPZQRzBGhUb29EUE1xC3NxZQ5ZCU5xfnNeXA9SU3d+CA9oUFduT2ttXmpEWW8OZQpnXElJbE9QU1hZRHVqD1hPcW5wUk5x'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[43]='exZXbhZPbg5zEndqUWxLDUlJBQ0MSFpqalZXDm5Fd25wSXdocwRsDnYJSERJewRlBVNfDkR7BQ5rUQUNWU1uT0lwS3EODVVPalFeZWtyWmV2eXFbaE9uDUR2Vg8OCkxuSQwWa3JND1kMTFRqDU13D1x1WFJ7S1luSFNNdGtTcQ4NWkt3a0pVW3BXUg9rd1tuWElYWUhaVAx2ElhlBVEST353DHRRbFVPc39kZWttXGpRclp0RAR0D0xzZ1sFU0wOC3JXDllQTnF6VW90C3BXUgx/XG5lR3R0e3BOT3ZxTAwMf29xD1pVCxZQV2VEd2kLBUtbRAVIVQRrU2h0RHFbDlNuWmpueVhxSUtuTWpQVQ8OClx3dhJfUgt1TQ9MZFZ0clZXC35KTlxQSVtq'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[44]='SVNqC3Z3WQ9UbEtlDBZJT34WSWVJRXdxTkxLUgwIawwEUw1lSXtpUhZQVE1RaFRoXHhUZVlrT0QODG9xXHlMDExoWg4MSklEewh0T2pNTw9UCnRqFlZOUkhXTQRrV2dETH9pUkQOamULElsNU1ledHJOUw16V0xlVAhqawVTd1tYTWxEWVMOagwEdg5Ec1JuSW10agwMbGhwSFcPREV2WXYNSAtZC1YNaklkdAR3bnFzC0kMRGVqDUlkSVtreV9uWWtPZXsOWVJUWFV0SFdvBFZXZ3RJdV5qclVSUg5FXm5zcVtSRAR2Dn5/TQ9RdldxRG90D15PTE0MVktETAVaDgxPZQ9wTWULSW10DlwETQRrcWx0c3lYD0xqVGhrR1xZbn5JaFtcU3dyTUxP'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu[45]='REd3cVFxT2VJTFBrSFdvZXsNWg1uf2cMDEdndER6TnFMcXcEUQwWDmt4SVtJdktqSFNkaFBWVFJrCmtxVlBUT2sOW3FzSV9xa3l3aAQFSGpbWV8LTk9SC3NNbg5RblRcTGlua3pWVA5MDF4A'
+UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu=cdefghijklmnopqIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwoXYZabcdefgFGHIJKLMNOPI.concat(UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu)
+do local _={89,10}end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0~=lIBCDEFGHIJKLMNOPQRS then else end
+pcall(function()end)
+do local _=460 end
+do llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 561 end
+if lIBCDEFGHIJKLMNOPQRS~=lIBCDEFGHIJKLMNOPQRS then else end
+do local _=366 end
+pcall(function()end)
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l or 31 end
+while false do break end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 775 end
+do local _={15,94}end
+local IJKLMNOPQRTUVWXYZabcdefghijklmnopqrZabcdefghijkDEFGHIJKLMNOPQRSTUVWXstuOPQRSTUVWXYZabcdefghijkOMNOPQRSTUVWXYZab={67,5,145,13,118,61}
+if YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst~=lIBCDEFGHIJKLMNOPQRS then else end
+pcall(function()end)
+do jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 504 end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 15 end
+while false do break end
+do jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=lIBCDEFGHIJKLMNOPQRS or 799 end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 801 end
+local function IIoRSTUVWXYZabcdefghijklmno11TUVWXYZabcdefghijklmnopqrstu()
+local d=UVWXYZOKLMNOPQRSTUVWXYZabcdefghijkHIlmnopqrstu
+d=VWXYZab1cdefghijklBCDEFGHIJKLMNOPQRSTUVWXYZabcijmn(d)
+if not d or #d==0 then error('L8')end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=79 end
+while false do break end
+do local _=328 end
+pcall(function()end)
+d=CDEFGHIJKLMNOPQRSOUV0defghijk(d,IJKLMNOPQRTUVWXYZabcdefghijklmnopqrZabcdefghijkDEFGHIJKLMNOPQRSTUVWXstuOPQRSTUVWXYZabcdefghijkOMNOPQRSTUVWXYZab[6])
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 92 end
+if lIBCDEFGHIJKLMNOPQRS then defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=55 end
+pcall(function()end)
+for _=5,3 do end
+d=VWXYZab1cdefghijklBCDEFGHIJKLMNOPQRSTUVWXYZabcijmn(d)
+if not d or #d==0 then error('L6')end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 90 end
+while false do break end
+while false do break end
+pcall(function()end)
+d=CDEFGHIJKLMNOPQRSOUV0defghijk(d,IJKLMNOPQRTUVWXYZabcdefghijklmnopqrZabcdefghijkDEFGHIJKLMNOPQRSTUVWXstuOPQRSTUVWXYZabcdefghijkOMNOPQRSTUVWXYZab[5])
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 then defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=76 end
+do local jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=183 end
+do llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=4 end
+d=BCDEFGHIJKLM1BCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh(d,IJKLMNOPQRTUVWXYZabcdefghijklmnopqrZabcdefghijkDEFGHIJKLMNOPQRSTUVWXstuOPQRSTUVWXYZabcdefghijkOMNOPQRSTUVWXYZab[4])
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0~=lIBCDEFGHIJKLMNOPQRS then else end
+do local _=190 end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0~=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk then else end
+do llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst or 201 end
+d=CDEFGHIJKLMNOPQRSOUV0defghijk(d,IJKLMNOPQRTUVWXYZabcdefghijklmnopqrZabcdefghijkDEFGHIJKLMNOPQRSTUVWXstuOPQRSTUVWXYZabcdefghijkOMNOPQRSTUVWXYZab[3])
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 86 end
+for _=3,1 do end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=lIBCDEFGHIJKLMNOPQRS or 465 end
+if lIBCDEFGHIJKLMNOPQRS~=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk then else end
+d=_OBCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopghijkrstu(d,IJKLMNOPQRTUVWXYZabcdefghijklmnopqrZabcdefghijkDEFGHIJKLMNOPQRSTUVWXstuOPQRSTUVWXYZabcdefghijkOMNOPQRSTUVWXYZab[2])
+if jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l~=YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst then else end
+if lIBCDEFGHIJKLMNOPQRS~=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk then else end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 then defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=65 end
+d=CDEFGHIJKLMNOPQRSOUV0defghijk(d,IJKLMNOPQRTUVWXYZabcdefghijklmnopqrZabcdefghijkDEFGHIJKLMNOPQRSTUVWXstuOPQRSTUVWXYZabcdefghijkOMNOPQRSTUVWXYZab[1])
+return d end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=65 end
+while false do break end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 then lIBCDEFGHIJKLMNOPQRS=52 end
+do lIBCDEFGHIJKLMNOPQRS=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 823 end
+if lIBCDEFGHIJKLMNOPQRS~=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l then else end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l or 15 end
+do jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l or 431 end
+for _=5,5 do end
+ABCDEFGoIQRSTUVRSTUVWXYZabcdefghijklmy,_ISTUVWXYZabcdefghijklmnOBCDEFGHIJKLMNOPQRSCDEFGHIJKLMNOPQRSTUVWXYZabcdefghJKLMNOPQRSTUVWPQRSTUVWXYZabcdefghijklmnopqrstuvwxy1=pcall(IIoRSTUVWXYZabcdefghijklmno11TUVWXYZabcdefghijklmnopqrstu)
+if not ABCDEFGoIQRSTUVRSTUVWXYZabcdefghijklmy then error('Decrypt failed: '..tostring(_ISTUVWXYZabcdefghijklmnOBCDEFGHIJKLMNOPQRSCDEFGHIJKLMNOPQRSTUVWXYZabcdefghJKLMNOPQRSTUVWPQRSTUVWXYZabcdefghijklmnopqrstuvwxy1))end
+repeat until true
+if YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst~=lIBCDEFGHIJKLMNOPQRS then else end
+do local _=598 end
+pcall(function()end)
+while false do break end
+if jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l then llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0=31 end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=30 end
+jklABCDEFGHIJKLMNOPQEFGHIJKLMNOPQWXYZabcdefghijklmijklmDWXYZabcdefghi,OOMNOPQRSTUVWXYZabcdefghiHIJKLMNOPQRSTUNOPQRSTUVWXl_1ghijkl=load(_ISTUVWXYZabcdefghijklmnOBCDEFGHIJKLMNOPQRSCDEFGHIJKLMNOPQRSTUVWXYZabcdefghJKLMNOPQRSTUVWPQRSTUVWXYZabcdefghijklmnopqrstuvwxy1)
+if not jklABCDEFGHIJKLMNOPQEFGHIJKLMNOPQWXYZabcdefghijklmijklmDWXYZabcdefghi then error('Load failed: '..tostring(OOMNOPQRSTUVWXYZabcdefghiHIJKLMNOPQRSTUNOPQRSTUVWXl_1ghijkl))end
+do local _=745 end
+pcall(function()end)
+repeat until true
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0 or 36 end
+do local _=868 end
+repeat until true
+do local defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=2 end
+MNOPQR1O_OPQRSTUVWXYZabcdefghijklmnopqrstuLMNOPQRSTUVWXYZabcdefghijklmnopqrs0,QRSTOEFGHIJKL=pcall(jklABCDEFGHIJKLMNOPQEFGHIJKLMNOPQWXYZabcdefghijklmijklmDWXYZabcdefghi)
+if not MNOPQR1O_OPQRSTUVWXYZabcdefghijklmnopqrstuLMNOPQRSTUVWXYZabcdefghijklmnopqrs0 then error('Exec failed: '..tostring(QRSTOEFGHIJKL))end
+do jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l=lIBCDEFGHIJKLMNOPQRS or 418 end
+do YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=24 end
+pcall(function()end)
+for _=3,5 do end
+pcall(function()end)
+for _=3,2 do end
+if llpqrlABCDEFGHIJKLMNOPQRSTUVWXYIRSTUVWXYZabcdefghijklmnopqrJKLMNOPQRSTUVWXYZabcdef0~=jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l then else end
+do local _=127 end
+do lIBCDEFGHIJKLMNOPQRS=defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk or 673 end
+do local _={47,1}end
+do defghijklmnopqrsQRSTUVVWXYZa0lmnopqrQRSTUVWXYZabcdefghijk=46 end
+repeat until true
+if YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst then YZabcdefghijklmnopq1CDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst=16 end
+do local _={38,44}end
+if jklmnopqrstuvwxbcdefghijklmnopqrstuvZabcdefghil_l~=lIBCDEFGHIJKLMNOPQRS then else end
